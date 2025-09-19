@@ -16,22 +16,28 @@
 
 <script setup>
 import { ref } from "vue";
-import { useAuthStore } from "../store";
+import { useRouter } from "vue-router";
+import { useAuthStore } from "../store/auth";
+import { useUiStore } from "../store/ui";
 import { login, authStatus } from "../api/auth";
+
+const router = useRouter();
+const authStore = useAuthStore();
+const ui = useUiStore();
 
 const username = ref("");
 const password = ref("");
 const error = ref("");
-
-const authStore = useAuthStore();
 
 async function handleLogin() {
   try {
     await login(username.value, password.value);
     const res = await authStatus();
     authStore.setUser(res.data);
-    alert("ログイン成功: " + res.data.username);
+    ui.showSnackbar("ログイン成功: " + res.data.username, "success");
+    router.push("/");
   } catch (err) {
+    ui.showSnackbar("ログイン失敗", "error");
     error.value = "ログイン失敗";
   }
 }
