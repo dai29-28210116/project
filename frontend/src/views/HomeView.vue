@@ -40,12 +40,17 @@
           lg="4"
         >
           <v-card @click="openDetailDialog(notice)">
+            <!-- サムネイル画像 -->
             <v-img
               v-if="notice.attachments && notice.attachments.length"
               :src="notice.attachments[0].file"
-              height="150px"
+              height="50"
+              width="150"
+              class="ma-3"
               cover
+              style="border-radius: 8px; object-fit: contain;"
             />
+
             <v-card-title>{{ notice.title }}</v-card-title>
             <v-card-subtitle>
               {{ formatDate(notice.publish_from) }} ~
@@ -74,17 +79,37 @@
               </v-chip>
             </v-card-actions>
           </v-card>
+
         </v-col>
       </v-row>
     </div>
+
 
     <!-- お知らせ一覧（テーブル） -->
     <div v-else>
       <v-data-table
         :headers="headers"
         :items="notices"
-        @click:row="openDetailDialog"
+        @click:row="(_, row) => openDetailDialog(row.item)"
       >
+
+        <!-- カテゴリをバッジ表示 -->
+        <template #item.categories="{ item }">
+          <div>
+            <v-chip
+              v-for="cat in item.categories"
+              :key="cat.id"
+              size="small"
+              class="ma-1"
+              color="primary"
+              variant="tonal"
+            >
+              {{ cat.name }}
+            </v-chip>
+          </div>
+        </template>
+
+        <!-- 添付ファイルリンク -->
         <template #item.attachments="{ item }">
           <div v-if="item.attachments?.length">
             <a
@@ -92,16 +117,20 @@
               :key="att.id"
               :href="att.file"
               target="_blank"
+              @click.stop
             >
-              {{ att.original_name }}
+              {{ att.original_filename }}
             </a>
           </div>
         </template>
+
+        <!-- 本文省略表示 -->
         <template #item.content="{ item }">
           <div v-html="shorten(item.content, 30)"></div>
         </template>
       </v-data-table>
     </div>
+
 
     <!-- 詳細 / 新規登録ダイアログ -->
     <NoticeDialog
@@ -116,7 +145,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, onMounted, watch } from "vue";
 import { useAuthStore } from "../store/auth";
 import { fetchNotices } from "../api/notice";
 import NoticeDialog from "../components/notice/NoticeDialog.vue";
@@ -124,6 +153,7 @@ import CategoryDialog from "../components/notice/CategoryDialog.vue";
 
 const authStore = useAuthStore();
 
+const allNotices = ref([]);   // ← 全件保持
 const notices = ref([]);
 const keyword = ref("");
 const viewMode = ref("card");
@@ -163,8 +193,10 @@ function shorten(content, len) {
   return text.length > len ? text.slice(0, len) + "..." : text;
 }
 
+// 初期ロード（全件取得）
 async function loadNotices() {
-  const res = await fetchNotices({ search: keyword.value });
+  const res = await fetchNotices();
+  allNotices.value = res.data;
   notices.value = res.data;
 }
 
@@ -181,4 +213,22 @@ function openCreateDialog() {
 onMounted(() => {
   loadNotices();
 });
+
+// --- 入力待ち検索 (フロント側フィルタ) ---
+let debounceTimer = null;
+watch(keyword, () => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    const kw = (keyword.value || "").trim().toLowerCase(); // ← null 安全化
+    if (!kw) {
+      notices.value = allNotices.value;
+    } else {
+      notices.value = allNotices.value.filter(n =>
+        n.title?.toLowerCase().includes(kw) ||
+        n.content?.replace(/<[^>]+>/g, "").toLowerCase().includes(kw)
+      );
+    }
+  }, 500); // 入力が止まって0.5秒後にフィルタ実行
+});
+
 </script>
